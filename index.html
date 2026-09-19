@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Device Storage Management</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1020;color:#f5f7ff;font-family:Arial,sans-serif}
+.wrap{max-width:950px;margin:auto;padding:24px}.head{text-align:center;margin-bottom:20px}
+h1{margin:0 0 8px}.muted{color:#aeb7d0;line-height:1.6}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+button{border:0;border-radius:10px;padding:12px 18px;background:#5268ff;color:white;font-weight:bold;cursor:pointer}
+.tab{background:#151c31;border:1px solid #303952}.tab.active{background:#3149a6}
+.panel{display:none}.panel.active{display:block}.card{background:#12192c;border:1px solid #29334e;border-radius:16px;padding:20px;margin-bottom:16px}
+input{display:none}.status{margin-top:12px;color:#aeb7d0;min-height:22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px}
+.stat{background:#19223a;border-radius:12px;padding:15px}.label{color:#9fa9c4;font-size:12px}.value{font-size:21px;font-weight:bold;margin-top:6px}
+.analysis{display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:center;margin-top:18px}
+.chart{width:260px;height:260px;border-radius:50%;margin:auto;background:#29334e;position:relative}
+.chart:after{content:"";position:absolute;width:105px;height:105px;background:#12192c;border-radius:50%;left:77.5px;top:77.5px}
+.legend{font-size:14px}.legend div{display:flex;gap:9px;align-items:center;margin:9px 0}.dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+.row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid #283149}.row:last-child{border:0}
+@media(max-width:700px){.analysis{grid-template-columns:1fr}.chart{width:220px;height:220px}.chart:after{width:90px;height:90px;left:65px;top:65px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="head"><h1>Device Storage Management</h1><p class="muted">Storage analysis dashboard</p></div>
+
+<div class="tabs">
+<button class="tab active" data-tab="analyze">Analyze</button>
+<button class="tab" data-tab="files">Files</button>
+<button class="tab" data-tab="system">System</button>
+</div>
+
+<section id="analyze" class="panel active">
+<div class="card">
+<h2>Storage Analyzer</h2>
+<p class="muted">Select a folder to analyze its files. A normal website cannot automatically read the entire phone storage because of browser security restrictions.</p>
+<input id="folder" type="file" webkitdirectory directory multiple>
+<button id="scan">SELECT FOLDER &amp; SCAN</button>
+<div id="status" class="status">Waiting for folder selection...</div>
+</div>
+
+<div id="results" style="display:none">
+<div class="card"><h2>Storage Breakdown</h2>
+<div class="analysis"><div id="chart" class="chart"></div><div id="legend" class="legend"></div></div>
+<div class="grid">
+<div class="stat"><div class="label">TOTAL SELECTED</div><div id="total" class="value">0 B</div></div>
+<div class="stat"><div class="label">FILES</div><div id="filesCount" class="value">0</div></div>
+<div class="stat"><div class="label">FOLDERS</div><div id="foldersCount" class="value">0</div></div>
+</div>
+</div>
+<div class="card"><h2>Largest Folders</h2><div id="largest"></div></div>
+</div>
+</section>
+
+<section id="files" class="panel"><div class="card"><h2>File Manager</h2><p class="muted">Folder analysis is available from the Analyze tab.</p></div></section>
+<section id="system" class="panel"><div class="card"><h2>System</h2><p class="muted">Platform: Web Browser<br>Storage access: User-selected folder only<br>Application: Device Storage Management</p></div></section>
+</div>
+
+<script>
+const colors=["#5268ff","#ff6b8a","#35d0ba","#ffb84d","#a875ff","#45a3ff","#78d64b","#8892a8"];
+const input=document.getElementById("folder");
+document.getElementById("scan").onclick=()=>input.click();
+
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+ document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+ document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+ b.classList.add("active"); document.getElementById(b.dataset.tab).classList.add("active");
+});
+
+function size(n){if(n<1024)return n.toFixed(0)+" B";let u=["KB","MB","GB","TB"],i=-1;do{n/=1024;i++}while(n>=1024&&i<u.length-1);return n.toFixed(n>=10?1:2)+" "+u[i]}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+
+input.onchange=()=>{
+ const files=[...input.files]; if(!files.length)return;
+ document.getElementById("status").textContent="Scanning selected folder...";
+ setTimeout(()=>analyze(files),50);
+};
+
+function analyze(files){
+ let groups={},total=0,folders=new Set();
+ for(const f of files){
+  total+=f.size; const p=(f.webkitRelativePath||f.name).split("/");
+  const g=p.length>1?p[1]:"Files"; groups[g]=(groups[g]||0)+f.size;
+  for(let i=1;i<p.length-1;i++)folders.add(p.slice(0,i+1).join("/"));
+ }
+ let list=Object.entries(groups).sort((a,b)=>b[1]-a[1]),top=list.slice(0,7);
+ const rest=list.slice(7).reduce((a,x)=>a+x[1],0); if(rest)top.push(["Others",rest]);
+
+ let angle=0,stops=[];
+ top.forEach(([n,v],i)=>{let d=total?v/total*360:0;stops.push(colors[i%colors.length]+" "+angle+"deg "+(angle+d)+"deg");angle+=d});
+ document.getElementById("chart").style.background=top.length?"conic-gradient("+stops.join(",")+")":"#29334e";
+
+ const legend=document.getElementById("legend");legend.innerHTML="";
+ top.forEach(([n,v],i)=>legend.innerHTML+=`<div><span class="dot" style="background:${colors[i%colors.length]}"></span>${esc(n)} — ${size(v)} (${(v/total*100).toFixed(1)}%)</div>`);
+
+ document.getElementById("total").textContent=size(total);
+ document.getElementById("filesCount").textContent=files.length.toLocaleString();
+ document.getElementById("foldersCount").textContent=folders.size.toLocaleString();
+
+ const largest=document.getElementById("largest");largest.innerHTML="";
+ top.slice(0,7).forEach(([n,v])=>largest.innerHTML+=`<div class="row"><span>${esc(n)}</span><span>${size(v)}</span></div>`);
+
+ document.getElementById("results").style.display="block";
+ document.getElementById("status").textContent="Scan complete.";
+}
+</script>
+</body>
+</html>
